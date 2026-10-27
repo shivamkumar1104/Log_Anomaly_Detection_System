@@ -1,0 +1,13 @@
+severity_levels:
+  CRITICAL: 5
+  FATAL: 5
+  ERROR: 4
+  WARN: 3
+  WARNING: 3
+  INFO: 2
+  DEBUG: 1
+  TRACE: 1
+default: INFO
+anomaly_score_thresholds:
+  HIGH: 0.8
+  MEDIUM: 0.5

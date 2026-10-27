@@ -1,5 +1,9 @@
 # Architecture
 
+The application follows the user's four-stage architecture: ingestion; per-file ML;
+explanation/grouping; delivery. A final operations/security layer is a production follow-up
+and is not claimed complete.
+
 ## Design principles
 
 - Keep ingestion, transformation, detection, grouping, and presentation as separate modules.
@@ -11,27 +15,34 @@
 - Keep raw/private data, secrets, and generated model artifacts out of Git.
 - Add functionality incrementally and document which parts are implemented.
 
-## Planned batch workflow
+## Implemented local MVP workflow
 
 ```mermaid
 flowchart LR
-    Source[CSV or text logs] --> Ingestion[Ingestion and schema validation]
+    Source[CSV, text logs, or text-based PDF] --> Ingestion[Size/type check; decode or PDF text extraction; normalize UTF-8]
     Ingestion --> Preprocessing[Normalization and sensitive-data handling]
-    Preprocessing --> Templates[Template extraction]
-    Templates --> Features[TF-IDF features]
-    Features --> Detection[Isolation Forest and baseline]
-    Detection --> Severity[Transparent severity rules]
-    Severity --> Grouping[Alert correlation and grouping]
-    Grouping --> Persistence[(Optional SQLite persistence)]
-    Grouping --> Dashboard[Streamlit investigation dashboard]
-    Detection --> Evaluation[Evaluation on appropriately labeled data]
-    Persistence --> API[Optional FastAPI interface]
-    API --> Services[Shared application services]
-    Dashboard --> Services
+    Preprocessing --> Templates[Template extraction masks IPs and identifiers]
+    Templates --> Features[TF-IDF fit per file]
+    Features --> Detection[Isolation Forest score]
+    Templates --> Baseline[Frequency baseline]
+    Detection --> Severity[Severity YAML rules and score thresholds]
+    Baseline --> Severity
+    Severity --> Grouping[Host + service + template + time window]
+    Grouping --> Dashboard[Next.js investigation and CSV/JSON export]
+    Grouping --> Persistence[(Local SQLite)]
+    Grouping --> API[FastAPI upload, analysis, history, alerts]
+    Detection --> Evaluation[P/R/F1 for supplied event-level labels]
 ```
 
-The diagram shows the target MVP boundaries, not completed functionality. Until later
-phases implement these components, this repository contains setup and documentation only.
+Format parsers support CSV, Apache access logs, Java-style logs with stack-trace merging, and
+generic text. UTF-8, BOM-marked UTF-16/32, and common legacy encodings are normalized to
+Unicode/UTF-8 in memory; CSV data can be recognized by content independently of the filename
+extension. Binary uploads are rejected. The detector and vectorizer are fitted independently
+for each uploaded file. Automatic selection uses a frequency baseline for fewer than 20
+events or fewer than five distinct message templates; otherwise it uses TF-IDF with
+Isolation Forest. The expected anomaly rate is a configurable scoring target, not a guarantee
+of an exact flagged percentage. Evaluation is shown only when valid per-event labels are
+supplied; results are not generalizable benchmark results.
 
 ## Module responsibilities
 
@@ -46,27 +57,39 @@ phases implement these components, this repository contains setup and documentat
 | `grouping` | Correlate related alerts without implying a confirmed incident or cause. |
 | `evaluation` | Calculate reproducible metrics aligned with the dataset's labeling unit. |
 | `persistence` | Store events, alerts, and groups locally in SQLite when enabled. |
-| `api` | Expose validated HTTP interfaces by calling shared application services. |
-| `config` | Load validated settings from environment variables and safe defaults. |
-| `dashboard` | Present evidence, trends, alert groups, and exports without owning ML logic. |
+| `api` | Expose a validated local-development HTTP interface over shared application services. |
+| `config` | Holds backend rules and configuration. |
+| `frontend` | Presents scores, evidence, alert groups, labels/metrics, and exports. |
 
 ## Repository layout
 
 ```text
-src/log_anomaly/       Application package and domain modules
-tests/unit/            Isolated component tests
-tests/integration/     Cross-module and application-flow tests
+backend/
+  src/log_anomaly/     FastAPI API and reusable analysis modules
+  tests/unit/          Isolated Python component tests
+  tests/integration/   Cross-module and API-flow tests
+  config/              Severity rules and backend configuration
+  data/                Local input data and generated SQLite database
+  models/              Generated model artifacts
+  pyproject.toml        Python package, test, and lint configuration
+  requirements*.txt    Python dependencies
+frontend/
+  src/app/             Next.js pages, layout, and global styles
+  src/components/      Dashboard and reusable UI components
 docs/                  Architecture and project documentation
-data/raw/              Local input data; do not commit private logs
-data/processed/        Generated/normalized data; ignored by Git
-models/                Generated model artifacts; joblib files are ignored
 deployment/            Later Docker and deployment assets
-loghub/                Existing dataset checkout; preserved and not part of the app package
+loghub/                Existing dataset checkout; separate from application code
 ```
 
 ## Implementation status
 
-Only the project layout and environment configuration are established in Phase 1. Data
-validation, preprocessing, model behavior, severity and grouping rules, persistence, API,
-and UI are planned interfaces and must not be considered operational until implemented
-and tested in their respective phases.
+Implemented: local batch ingestion and validation, common parser selection, text-based PDF
+extraction with OCR scans rejected, preprocessing,
+per-file TF-IDF/Isolation Forest and frequency scores, severity assignment, alert grouping,
+Next.js dashboard, FastAPI upload/analysis/history/alerts endpoints, CSV/JSON exports,
+optional anomaly-filtered PDF/Excel reports, per-event evaluation metrics, and SQLite storage.
+
+Not implemented: robust parsing for every vendor format, template mining with Drain3,
+multi-user persistence/PostgreSQL, authentication/authorization, rate limiting, operational
+monitoring, backups, Docker/CI, and production deployment. The API has no authentication and
+must remain local/trusted until hardened.
