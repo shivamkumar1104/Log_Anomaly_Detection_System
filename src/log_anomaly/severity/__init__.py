@@ -1,0 +1,1 @@
+"""Transparent alert severity assessment."""

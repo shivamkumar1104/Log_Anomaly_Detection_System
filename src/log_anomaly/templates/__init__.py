@@ -1,0 +1,1 @@
+"""Log message template extraction."""
