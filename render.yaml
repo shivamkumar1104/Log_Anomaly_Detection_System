@@ -38,8 +38,4 @@ services:
       - key: NODE_VERSION
         value: 20.18.0
       - key: NEXT_PUBLIC_API_BASE_URL
-        fromService:
-          type: web
-          name: log-anomaly-backend
-          property: url
-
+        sync: false
