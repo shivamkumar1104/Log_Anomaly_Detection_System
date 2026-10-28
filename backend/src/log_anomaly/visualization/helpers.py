@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pandas as pd
 from log_anomaly.detection.analyze import analyze_events
-from log_anomaly.grouping.correlation import group_alerts
+from log_anomaly.grouping.correlate import group_alerts
 
 # Candidate windows (minutes) considered for adaptive grouping.
 CANDIDATE_WINDOWS = [1, 2, 5, 10, 15, 30]

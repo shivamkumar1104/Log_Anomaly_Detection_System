@@ -71,7 +71,7 @@ def get_metrics():
     )
 
 @router.get("/timeline", response_model=TimelineResponse)
-def get_timeline(interval: str = Query("5m", regex=r"^(\d+)(m|h)$")):
+def get_timeline(interval: str = Query("5m", regex=r"^(\\d+)(m|h)$")):
     df = _load_last_analysis()
     # Ensure timestamps are proper pandas datetime (UTC)
     df["timestamp_dt"] = pd.to_datetime(df["timestamp"], utc=True, errors="coerce")
@@ -150,32 +150,3 @@ def run_simulation(
         template=processed.get("template").tolist() if "template" in processed else [None] * len(processed),
         ground_truth=processed.get("ground_truth").tolist() if "ground_truth" in processed else None,
     )
-
-from __future__ import annotations
-from fastapi import APIRouter, Depends, HTTPException, Query
-from typing import List, Optional
-import pandas as pd
-
-from log_anomaly.visualization.schemas import (
-    PredictionResponse,
-    MetricsResponse,
-    TimelineResponse,
-    GroupingEffectResponse,
-)
-from log_anomaly.visualization.metrics import (
-    compute_roc,
-    compute_pr,
-    compute_confusion,
-    reduction_ratio,
-)
-from log_anomaly.visualization.helpers import process_dataframe
-from log_anomaly.visualization.simulation import generate_synthetic
-from log_anomaly.persistence.sqlite_store import SQLiteStore
-
-router = APIRouter(prefix="/visualization", tags=["visualization"])
-
-def _load_last_analysis() -> pd.DataFrame:
-    # The upload endpoint stores the## 📊 Visualization Center – end‑to‑end implementation guide  
-The following checklist shows **exact files to create / edit**, the **exact code snippets** you should paste, and the **commands to run**. Follow the steps in order; every command works on your current Windows workspace (`c:\Users\hp\OneDrive\Desktop\log_anomaly`).  
-
-> 
