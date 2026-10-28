@@ -30,12 +30,25 @@ app = FastAPI(
     description="Local-development API for uploading and analyzing log files.",
     version="0.2.0",
 )
+raw_origins = os.getenv("LOG_ANOMALY_FRONTEND_ORIGIN", "http://localhost:3000")
+configured_origins = [orig.strip() for orig in raw_origins.split(",") if orig.strip()]
+allowed_origins = list(
+    set(
+        configured_origins
+        + [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+        ]
+    )
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[os.getenv("LOG_ANOMALY_FRONTEND_ORIGIN", "http://localhost:3000")],
-    allow_credentials=False,
-    allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_origins=allowed_origins,
+    allow_origin_regex=r"https?://.*\.onrender\.com",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -43,7 +56,7 @@ class AnalysisRequest(BaseModel):
     """Validated request body for batch event analysis."""
 
     events: list[dict[str, Any]] = Field(min_length=1, max_length=10_000)
-    method: Literal["auto", "isolation_forest", "baseline"] = "auto"
+    method: Literal["auto", "isolation_forest", "baseline", "clustering"] = "auto"
     contamination: float = Field(default=0.1, ge=0.01, le=0.5)
     grouping_window_minutes: int = Field(default=5, ge=1, le=1440)
 
@@ -69,6 +82,27 @@ def _analyze(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+@app.get("/")
+def root() -> dict[str, Any]:
+    """Root endpoint to guide users and confirm backend status."""
+    return {
+        "status": "online",
+        "service": "Anomaly Detect API",
+        "docs": "/docs",
+        "frontend": "http://localhost:3000",
+        "message": (
+            "Backend is running. Open http://localhost:3000 in your browser "
+            "to access the frontend dashboard."
+        ),
+    }
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon() -> Response:
+    """Return 204 No Content for browser favicon requests."""
+    return Response(status_code=204)
+
+
 @app.get("/health")
 @app.get("/api/health")
 def health() -> dict[str, str]:
@@ -79,7 +113,7 @@ def health() -> dict[str, str]:
 @app.post("/api/upload")
 async def upload_and_analyze(
     file: Annotated[UploadFile, File()],
-    method: Literal["auto", "isolation_forest", "baseline"] = Form("auto"),
+    method: Literal["auto", "isolation_forest", "baseline", "clustering"] = Form("auto"),
     contamination: float = Form(0.1, ge=0.01, le=0.5),
     grouping_window_minutes: int = Form(5, ge=1, le=1440),
 ) -> dict[str, Any]:
@@ -200,3 +234,9 @@ def export_alerts(format: Literal["csv", "json"] = Query(default="csv")) -> Resp
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="alerts.csv"'},
     )
+
+if __name__ == "__main__":
+    import uvicorn
+
+    port = int(os.getenv("PORT", "8000"))
+    uvicorn.run("log_anomaly.api.app:app", host="0.0.0.0", port=port, reload=False)

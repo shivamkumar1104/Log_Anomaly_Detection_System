@@ -192,3 +192,30 @@ def test_sqlite_persists_analysis_batch(tmp_path: Path) -> None:
     with sqlite3.connect(store.path) as connection:
         rows = connection.execute("SELECT COUNT(*) FROM analysis_events").fetchone()[0]
     assert rows == 10
+
+
+def test_clustering_groups_similar_logs_and_flags_outlier() -> None:
+    events = pd.DataFrame(
+        {
+            "message": (
+                ["User login successful for user admin"] * 10
+                + ["Database query executed in 12ms"] * 10
+                + ["FATAL KERNEL PANIC CPU REGISTER CORRUPTION OUT OF MEMORY"]
+            )
+        }
+    )
+    result = analyze_events(events, method="clustering", contamination=0.1)
+
+    assert "cluster_id" in result.columns
+    # Routine messages should form clusters
+    login_clusters = set(result.iloc[:10]["cluster_id"])
+    db_clusters = set(result.iloc[10:20]["cluster_id"])
+    assert len(login_clusters) == 1
+    assert len(db_clusters) == 1
+    assert login_clusters != db_clusters
+
+    # Outlier message should be flagged as anomaly
+    outlier_event = result.iloc[20]
+    assert outlier_event["is_anomaly"]
+    assert outlier_event["anomaly_score"] > result.iloc[0]["anomaly_score"]
+    assert "cluster" in outlier_event["explanation"].lower()

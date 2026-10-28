@@ -11,6 +11,8 @@ backend/data/raw/*
 !backend/data/raw/.gitkeep
 backend/data/processed/
 backend/data/*.db
+data/*.db
+*.db
 *.log
 *.egg-info/
 node_modules/

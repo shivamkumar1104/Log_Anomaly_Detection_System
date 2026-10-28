@@ -21,6 +21,7 @@ type EventRecord = {
   baseline_score: number;
   is_anomaly: boolean;
   group_id: string | null;
+  cluster_id?: string | null;
   explanation: string;
   label?: string | number | boolean | null;
 };
@@ -83,7 +84,7 @@ function csvEscape(value: unknown): string {
 
 export function Dashboard() {
   const [file, setFile] = useState<File | null>(null);
-  const [contamination, setContamination] = useState(0.1);
+  const [contamination] = useState(0.1);
   const [groupingWindow, setGroupingWindow] = useState(5);
   const [excludeAnomalies, setExcludeAnomalies] = useState(true);
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -91,7 +92,9 @@ export function Dashboard() {
   const [error, setError] = useState("");
   const [apiOnline, setApiOnline] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [showAll, setShowAll] = useState(false);
+  const [method] = useState("auto");
+  const [selectedCluster, setSelectedCluster] = useState<string | null>(null);
+  const [viewFilter, setViewFilter] = useState<"anomalies" | "normal" | "all">("anomalies");
 
   const refreshHistory = useCallback(async () => {
     try {
@@ -131,6 +134,10 @@ export function Dashboard() {
 
   const anomalies = useMemo(
     () => result?.events.filter((event) => event.is_anomaly) ?? [],
+    [result],
+  );
+  const normalEvents = useMemo(
+    () => result?.events.filter((event) => !event.is_anomaly) ?? [],
     [result],
   );
   const groupCount = useMemo(
@@ -191,7 +198,7 @@ export function Dashboard() {
     setResult(null);
     const body = new FormData();
     body.append("file", file);
-    body.append("method", "auto");
+    body.append("method", method);
     body.append("contamination", String(contamination));
     body.append("grouping_window_minutes", String(groupingWindow));
     try {
@@ -199,6 +206,7 @@ export function Dashboard() {
       if (!response.ok) throw new Error(await readError(response));
       const payload = (await response.json()) as AnalysisResult;
       setResult(payload);
+      setSelectedCluster(null);
       setApiOnline(true);
       await refreshHistory();
     } catch (reason) {
@@ -218,7 +226,8 @@ export function Dashboard() {
       });
       if (!response.ok) throw new Error(await readError(response));
       setResult((await response.json()) as AnalysisResult);
-      setShowAll(false);
+      setSelectedCluster(null);
+      setViewFilter("anomalies");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not load this analysis.");
     } finally {
@@ -226,7 +235,33 @@ export function Dashboard() {
     }
   }
 
-  const displayedEvents = showAll ? result?.events ?? [] : anomalies;
+  const clusters = useMemo(() => {
+    if (!result?.events) return [];
+    const counts: Record<string, number> = {};
+    for (const ev of result.events) {
+      const cid = ev.cluster_id || "Unassigned";
+      counts[cid] = (counts[cid] || 0) + 1;
+    }
+    return Object.entries(counts).sort((a, b) => {
+      if (a[0] === "Outlier") return 1;
+      if (b[0] === "Outlier") return -1;
+      return b[1] - a[1];
+    });
+  }, [result]);
+
+  const displayedEvents = useMemo(() => {
+    let list = result?.events ?? [];
+    if (viewFilter === "anomalies") {
+      list = anomalies;
+    } else if (viewFilter === "normal") {
+      list = normalEvents;
+    }
+    if (selectedCluster) {
+      list = list.filter((event) => (event.cluster_id || "Unassigned") === selectedCluster);
+    }
+    return list;
+  }, [viewFilter, result, anomalies, normalEvents, selectedCluster]);
+
   const exportEvents = result?.events.filter(
     (event) => !excludeAnomalies || !event.is_anomaly,
   ) ?? [];
@@ -298,6 +333,7 @@ export function Dashboard() {
                   setResult(null);
                   setFile(null);
                   setError("");
+                  setViewFilter("anomalies");
                 }}
                 type="button"
               >
@@ -342,31 +378,36 @@ export function Dashboard() {
                 </span>
               </label>
 
-              <div className="settings-row">
+              <div className="settings-row settings-adjusted">
                 <label>
-                  <span>Expected anomaly rate <strong>{(contamination * 100).toFixed(0)}%</strong></span>
-                  <input
-                    max="0.5"
-                    min="0.01"
-                    onChange={(event) => setContamination(Number(event.target.value))}
-                    step="0.01"
-                    type="range"
-                    value={contamination}
-                  />
-                </label>
-                <label>
-                  <span>Grouping window</span>
+                  <span>
+                    Grouping window
+                    <strong>Correlate alerts</strong>
+                  </span>
                   <select
                     onChange={(event) => setGroupingWindow(Number(event.target.value))}
                     value={groupingWindow}
                   >
-                    {[1, 5, 10, 15, 30, 60].map((minutes) => (
-                      <option key={minutes} value={minutes}>
-                        {minutes} minutes
-                      </option>
-                    ))}
+                    <option value={1}>1 minute</option>
+                    <option value={5}>5 minutes (Recommended)</option>
+                    <option value={10}>10 minutes</option>
+                    <option value={15}>15 minutes</option>
+                    <option value={30}>30 minutes</option>
+                    <option value={60}>60 minutes (1 hour)</option>
                   </select>
+                  <small className="field-hint">
+                    Alerts with matching host, service, and template within this window are grouped into a single incident.
+                  </small>
                 </label>
+                <div className="backend-auto-badge">
+                  <div className="auto-badge-header">
+                    <span className="badge-dot" />
+                    <strong>Backend Auto-Detection</strong>
+                  </div>
+                  <p>
+                    Detection method is automatically selected by the backend (TF-IDF + Isolation Forest &amp; semantic clustering) with an optimal 10% anomaly threshold.
+                  </p>
+                </div>
               </div>
               <div className="form-footer">
                 <span className="privacy-hint">Files are processed locally by your backend.</span>
@@ -453,6 +494,7 @@ export function Dashboard() {
               <section className="metrics-grid" aria-label="Analysis summary">
                 <Metric label="Log events" value={result.events.length.toLocaleString()} />
                 <Metric label="Anomalies" value={anomalies.length.toLocaleString()} accent />
+                <Metric label="Clusters" value={clusters.length.toLocaleString()} />
                 <Metric label="Alert groups" value={groupCount.toLocaleString()} />
                 <Metric
                   label="Anomaly rate"
@@ -480,32 +522,76 @@ export function Dashboard() {
                 <div className="panel-heading results-heading">
                   <div>
                     <h2>Investigation evidence</h2>
-                    <p>Review flagged messages, score, grouping, and detector explanation.</p>
+                    <p>Review flagged messages, score, grouping, clusters, and detector explanation.</p>
                   </div>
                   <div className="table-actions">
                     <button
-                      className={`filter-button ${!showAll ? "selected" : ""}`}
-                      onClick={() => setShowAll(false)}
+                      className={`filter-button ${viewFilter === "anomalies" ? "selected" : ""}`}
+                      onClick={() => {
+                        setViewFilter("anomalies");
+                        setSelectedCluster(null);
+                      }}
                       type="button"
                     >
-                      Anomalies ({anomalies.length})
+                      Detected Anomalies ({anomalies.length})
                     </button>
                     <button
-                      className={`filter-button ${showAll ? "selected" : ""}`}
-                      onClick={() => setShowAll(true)}
+                      className={`filter-button ${viewFilter === "normal" ? "selected" : ""}`}
+                      onClick={() => {
+                        setViewFilter("normal");
+                        setSelectedCluster(null);
+                      }}
                       type="button"
                     >
-                      All events ({result.events.length})
+                      Clean / Normal ({normalEvents.length})
+                    </button>
+                    <button
+                      className={`filter-button ${viewFilter === "all" ? "selected" : ""}`}
+                      onClick={() => {
+                        setViewFilter("all");
+                        setSelectedCluster(null);
+                      }}
+                      type="button"
+                    >
+                      All Events ({result.events.length})
                     </button>
                   </div>
                 </div>
+
+                {clusters.length > 0 && (
+                  <div className="cluster-bar">
+                    <span className="cluster-bar-label">Filter by Cluster:</span>
+                    <button
+                      className={`cluster-pill ${selectedCluster === null ? "selected" : ""}`}
+                      onClick={() => setSelectedCluster(null)}
+                      type="button"
+                    >
+                      All ({viewFilter === "all" ? result.events.length : viewFilter === "normal" ? normalEvents.length : anomalies.length})
+                    </button>
+                    {clusters.map(([cName, count]) => (
+                      <button
+                        key={cName}
+                        className={`cluster-pill ${cName === "Outlier" ? "outlier" : ""} ${
+                          selectedCluster === cName ? "selected" : ""
+                        }`}
+                        onClick={() => setSelectedCluster(selectedCluster === cName ? null : cName)}
+                        type="button"
+                      >
+                        {cName} ({count})
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 <div className="table-wrap">
                   {displayedEvents.length ? (
                     <table>
                       <thead>
                         <tr>
+                          <th>Status</th>
                           <th>Time</th>
                           <th>Severity</th>
+                          <th>Cluster</th>
                           <th>Message / evidence</th>
                           <th>Score</th>
                           <th>Group</th>
@@ -515,12 +601,30 @@ export function Dashboard() {
                       <tbody>
                         {displayedEvents.map((event) => (
                           <tr key={event.event_id}>
+                            <td>
+                              <span
+                                className={`status-pill ${
+                                  event.is_anomaly ? "status-pill-anomaly" : "status-pill-normal"
+                                }`}
+                              >
+                                {event.is_anomaly ? "ANOMALY (Excluded)" : "CLEAN (Retained)"}
+                              </span>
+                            </td>
                             <td className="timestamp-cell">
                               {event.timestamp ? new Date(event.timestamp).toLocaleString() : "—"}
                             </td>
                             <td>
                               <span className={`severity severity-${(event.severity ?? "info").toLowerCase()}`}>
                                 {event.severity ?? "INFO"}
+                              </span>
+                            </td>
+                            <td>
+                              <span
+                                className={`cluster-badge ${
+                                  event.cluster_id === "Outlier" ? "cluster-badge-outlier" : ""
+                                }`}
+                              >
+                                {event.cluster_id ?? "—"}
                               </span>
                             </td>
                             <td className="message-cell">
@@ -543,7 +647,9 @@ export function Dashboard() {
                     </table>
                   ) : (
                     <div className="empty-state">
-                      {showAll ? "No events in this analysis." : "No anomalies were flagged."}
+                      {viewFilter === "anomalies" && "No anomalies were flagged."}
+                      {viewFilter === "normal" && "No normal events found."}
+                      {viewFilter === "all" && "No events in this analysis."}
                     </div>
                   )}
                 </div>
