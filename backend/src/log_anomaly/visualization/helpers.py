@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import pandas as pd
+
 from log_anomaly.detection.analyze import analyze_events
 from log_anomaly.grouping.correlate import group_alerts
 
@@ -32,7 +33,11 @@ def _select_window(df: pd.DataFrame):
     return best, False, f"Chosen {best} min based on median inter‑event gap {median_gap:.1f} min."
 
 
-def process_dataframe(df: pd.DataFrame, method: str = "auto", contamination: float = 0.1) -> pd.DataFrame:
+def process_dataframe(
+    df: pd.DataFrame,
+    method: str = "auto",
+    contamination: float = 0.1,
+) -> pd.DataFrame:
     """Run detection + grouping on a raw DataFrame.
     The function returns a DataFrame that already contains the columns
     required by the API response models.

@@ -1,9 +1,11 @@
 # backend/src/log_anomaly/visualization/simulation.py
 from __future__ import annotations
-import pandas as pd
-import numpy as np
+
 import random
 from datetime import datetime, timedelta
+
+import numpy as np
+import pandas as pd
 
 HOSTS = [f"host-{i}" for i in range(1, 6)]
 SERVICES = ["web", "db", "cache", "api"]
@@ -38,12 +40,16 @@ def generate_synthetic(
     timestamps = [
         now - timedelta(minutes=random.randint(0, 1440)) for _ in range(size)
     ]
-    df = pd.DataFrame({
-        "timestamp": timestamps,
-        "host": np.random.choice(HOSTS, size),
-        "service": np.random.choice(SERVICES, size),
-        "template": [_random_template() for _ in range(size)],
-    })
+    messages = [_random_template() for _ in range(size)]
+    df = pd.DataFrame(
+        {
+            "timestamp": timestamps,
+            "host": np.random.choice(HOSTS, size),
+            "service": np.random.choice(SERVICES, size),
+            "message": messages,
+            "template": messages,
+        }
+    )
     # Ground‑truth flag
     df["ground_truth"] = np.random.rand(size) < prevalence
     return df

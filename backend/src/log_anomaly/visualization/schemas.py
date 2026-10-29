@@ -6,31 +6,31 @@ schema generation error‑free while the internal pipeline may still use
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+
 class PredictionResponse(BaseModel):
-    anomaly_score: List[float] = Field(..., description="Raw anomaly scores (0‑1)")
-    is_anomaly: List[bool] = Field(..., description="Boolean prediction")
-    timestamp: List[Optional[datetime]] = Field(
+    anomaly_score: list[float] = Field(..., description="Raw anomaly scores (0‑1)")
+    is_anomaly: list[bool] = Field(..., description="Boolean prediction")
+    timestamp: list[datetime | None] = Field(
         ..., description="Original timestamps (UTC), may be None"
     )
-    host: List[Optional[str]] = Field(..., description="Host identifier")
-    service: List[Optional[str]] = Field(..., description="Service identifier")
-    template: List[Optional[str]] = Field(..., description="Log‑template after normalization")
-    ground_truth: Optional[List[bool]] = Field(
+    host: list[str | None] = Field(..., description="Host identifier")
+    service: list[str | None] = Field(..., description="Service identifier")
+    template: list[str | None] = Field(..., description="Log‑template after normalization")
+    ground_truth: list[bool] | None = Field(
         None, description="Ground‑truth label if supplied"
     )
 
 class RocCurve(BaseModel):
-    fpr: List[float]
-    tpr: List[float]
+    fpr: list[float]
+    tpr: list[float]
     auc: float
 
 class PrCurve(BaseModel):
-    precision: List[float]
-    recall: List[float]
+    precision: list[float]
+    recall: list[float]
     average_precision: float
 
 class ConfusionMatrix(BaseModel):
@@ -40,11 +40,11 @@ class ConfusionMatrix(BaseModel):
     tp: int
 
 class MetricsResponse(BaseModel):
-    roc: Optional[RocCurve] = None
-    pr: Optional[PrCurve] = None
-    confusion: Optional[ConfusionMatrix] = None
-    reduction_ratio: Optional[float] = None
-    fallback_message: Optional[str] = None   # set when ground‑truth is missing
+    roc: RocCurve | None = None
+    pr: PrCurve | None = None
+    confusion: ConfusionMatrix | None = None
+    reduction_ratio: float | None = None
+    fallback_message: str | None = None   # set when ground‑truth is missing
 
 class TimelineBucket(BaseModel):
     start: datetime
@@ -55,14 +55,10 @@ class TimelineBucket(BaseModel):
 
 class TimelineResponse(BaseModel):
     interval: str
-    buckets: List[TimelineBucket]
+    buckets: list[TimelineBucket]
 
 class GroupingEffectResponse(BaseModel):
     alert_count: int
     incident_count: int
-    reduction_percent: Optional[float] = None
-    note: Optional[str] = None
-
-    class Config:
-        arbitrary_types_allowed = True
-
+    reduction_percent: float | None = None
+    note: str | None = None

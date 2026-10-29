@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
+from log_anomaly.api.visualization import router as visualization_router
 from log_anomaly.ingestion.parser import (
     MAX_UPLOAD_BYTES,
     IngestionError,
@@ -50,6 +51,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(visualization_router, prefix="/api")
 
 
 class AnalysisRequest(BaseModel):

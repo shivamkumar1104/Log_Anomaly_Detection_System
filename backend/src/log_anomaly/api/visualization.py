@@ -1,30 +1,33 @@
 # backend/src/log_anomaly/api/visualization.py
 from __future__ import annotations
-from fastapi import APIRouter, HTTPException, Query
-from typing import List, Optional
-import pandas as pd
 
-from log_anomaly.visualization.schemas import (
-    PredictionResponse,
-    MetricsResponse,
-    TimelineResponse,
-    GroupingEffectResponse,
-)
+import os
+from datetime import UTC, datetime
+
+import pandas as pd
+from fastapi import APIRouter, HTTPException, Query
+
+from log_anomaly.persistence.sqlite_store import SQLiteStore
+from log_anomaly.visualization.helpers import process_dataframe
 from log_anomaly.visualization.metrics import (
-    compute_roc,
-    compute_pr,
     compute_confusion,
+    compute_pr,
+    compute_roc,
     reduction_ratio,
 )
-from log_anomaly.visualization.helpers import process_dataframe
+from log_anomaly.visualization.schemas import (
+    GroupingEffectResponse,
+    MetricsResponse,
+    PredictionResponse,
+    TimelineResponse,
+)
 from log_anomaly.visualization.simulation import generate_synthetic
-from log_anomaly.persistence.sqlite_store import SQLiteStore
 
 router = APIRouter(prefix="/visualization", tags=["visualization"])
 
 def _load_last_analysis() -> pd.DataFrame:
     """Load the most recent analysis saved by the upload endpoint."""
-    store = SQLiteStore("data/log_anomaly.db")
+    store = SQLiteStore(os.getenv("LOG_ANOMALY_DATABASE_PATH", "data/log_anomaly.db"))
     # The SQLiteStore stores analyses as JSON rows; we reuse its helper to fetch the
     # most recent one and turn it back into a DataFrame.
     recent = store.list_analyses(limit=1)
@@ -33,6 +36,8 @@ def _load_last_analysis() -> pd.DataFrame:
     analysis_id = recent[0]["analysis_id"]
     analysis = store.get_analysis(analysis_id)
     # The stored dict contains a list of event dicts under "events".
+    if analysis is None:
+        raise HTTPException(status_code=404, detail="No analysis available yet.")
     events = pd.DataFrame(analysis.get("events", []))
     return events
 
@@ -42,7 +47,11 @@ def get_predictions():
     return PredictionResponse(
         anomaly_score=df["anomaly_score"].tolist(),
         is_anomaly=df["is_anomaly"].tolist(),
-        timestamp=df["timestamp"].apply(lambda x: pd.to_datetime(x, utc=True) if x else None).tolist(),
+        timestamp=df["timestamp"].apply(
+            lambda value: (
+                pd.to_datetime(value, utc=True).to_pydatetime() if value else None
+            )
+        ).tolist(),
         host=df.get("host").tolist() if "host" in df else [None] * len(df),
         service=df.get("service").tolist() if "service" in df else [None] * len(df),
         template=df.get("template").tolist() if "template" in df else [None] * len(df),
@@ -71,7 +80,7 @@ def get_metrics():
     )
 
 @router.get("/timeline", response_model=TimelineResponse)
-def get_timeline(interval: str = Query("5m", regex=r"^(\\d+)(m|h)$")):
+def get_timeline(interval: str = Query("5m", pattern=r"^(\d+)(m|h)$")):
     df = _load_last_analysis()
     # Ensure timestamps are proper pandas datetime (UTC)
     df["timestamp_dt"] = pd.to_datetime(df["timestamp"], utc=True, errors="coerce")
@@ -90,8 +99,9 @@ def get_timeline(interval: str = Query("5m", regex=r"^(\\d+)(m|h)$")):
         hist = []
         for i in range(len(buckets) - 1):
             mask = (df["timestamp_dt"] >= buckets[i]) & (df["timestamp_dt"] < buckets[i + 1])
-            normal = int(((df["is_anomaly"] == False) & mask).sum())
-            anomaly = int(((df["is_anomaly"] == True) & mask).sum())
+            anomaly_flags = df["is_anomaly"].astype(bool)
+            normal = int((~anomaly_flags & mask).sum())
+            anomaly = int((anomaly_flags & mask).sum())
             no_ts = int((df["timestamp_dt"].isna() & mask).sum())
             hist.append(
                 {
@@ -106,10 +116,10 @@ def get_timeline(interval: str = Query("5m", regex=r"^(\\d+)(m|h)$")):
         # No timestamps at all – single bucket with counts based on is_anomaly
         hist = [
             {
-                "start": pd.Timestamp.utcnow(),
-                "end": pd.Timestamp.utcnow(),
-                "normal": int((df["is_anomaly"] == False).sum()),
-                "anomaly": int((df["is_anomaly"] == True).sum()),
+                "start": datetime.now(UTC),
+                "end": datetime.now(UTC),
+                "normal": int((~df["is_anomaly"].astype(bool)).sum()),
+                "anomaly": int(df["is_anomaly"].astype(bool).sum()),
                 "no_timestamp": len(df),
             }
         ]
@@ -135,7 +145,7 @@ def get_grouping_effect():
 def run_simulation(
     size: int = Query(500, ge=1, le=5000),
     prevalence: float = Query(0.05, ge=0.0, le=1.0),
-    seed: Optional[int] = None,
+    seed: int | None = None,
 ):
     df = generate_synthetic(size=size, prevalence=prevalence, seed=seed)
     # Run the same pipeline as real data
@@ -146,7 +156,19 @@ def run_simulation(
         is_anomaly=processed["is_anomaly"].tolist(),
         timestamp=processed["timestamp"].tolist(),
         host=processed.get("host").tolist() if "host" in processed else [None] * len(processed),
-        service=processed.get("service").tolist() if "service" in processed else [None] * len(processed),
-        template=processed.get("template").tolist() if "template" in processed else [None] * len(processed),
-        ground_truth=processed.get("ground_truth").tolist() if "ground_truth" in processed else None,
+        service=(
+            processed.get("service").tolist()
+            if "service" in processed
+            else [None] * len(processed)
+        ),
+        template=(
+            processed.get("template").tolist()
+            if "template" in processed
+            else [None] * len(processed)
+        ),
+        ground_truth=(
+            processed.get("ground_truth").tolist()
+            if "ground_truth" in processed
+            else None
+        ),
     )
