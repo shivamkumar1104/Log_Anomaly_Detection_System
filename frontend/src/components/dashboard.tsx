@@ -6,7 +6,6 @@ import Link from "next/link";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8000";
-const MAX_FILE_BYTES = 25 * 1024 * 1024;
 const ACCEPTED_EXTENSIONS = new Set(["csv", "txt", "log", "pdf"]);
 
 type EventRecord = {
@@ -84,6 +83,7 @@ function csvEscape(value: unknown): string {
 
 export function Dashboard() {
   const [file, setFile] = useState<File | null>(null);
+  const [maxUploadMb, setMaxUploadMb] = useState(100);
   const [contamination] = useState(0.1);
   const [groupingWindow, setGroupingWindow] = useState(5);
   const [excludeAnomalies, setExcludeAnomalies] = useState(true);
@@ -103,6 +103,10 @@ export function Dashboard() {
         fetch(`${API_BASE}/api/analyses?limit=20`, { cache: "no-store" }),
       ]);
       if (!health.ok || !historyResponse.ok) throw new Error("API unavailable");
+      const healthData = (await health.json()) as { max_upload_mb?: number };
+      if (typeof healthData.max_upload_mb === "number") {
+        setMaxUploadMb(healthData.max_upload_mb);
+      }
       const data = (await historyResponse.json()) as { analyses: AnalysisSummary[] };
       setHistory(data.analyses);
       setApiOnline(true);
@@ -119,6 +123,10 @@ export function Dashboard() {
     ])
       .then(async ([health, historyResponse]) => {
         if (!health.ok || !historyResponse.ok) throw new Error("API unavailable");
+        const healthData = (await health.json()) as { max_upload_mb?: number };
+        if (typeof healthData.max_upload_mb === "number") {
+          setMaxUploadMb(healthData.max_upload_mb);
+        }
         const data = (await historyResponse.json()) as { analyses: AnalysisSummary[] };
         if (!active) return;
         setHistory(data.analyses);
@@ -179,9 +187,9 @@ export function Dashboard() {
       setError("Unsupported file. Choose a .csv, .txt, .log, or text-based .pdf file.");
       return;
     }
-    if (selected.size > MAX_FILE_BYTES) {
+    if (selected.size > maxUploadMb * 1024 * 1024) {
       setFile(null);
-      setError("File exceeds the 25 MB upload limit.");
+      setError(`File exceeds this backend's ${maxUploadMb} MB upload limit.`);
       return;
     }
     setFile(selected);
@@ -354,7 +362,7 @@ export function Dashboard() {
             <div className="panel-heading">
               <div>
                 <h2>Upload a log file</h2>
-                <p>CSV, text logs, and text-based PDFs · up to 25 MB</p>
+                <p>CSV, text logs, and text-based PDFs · up to {maxUploadMb} MB on this server</p>
               </div>
               <span className="step-badge">01 / INGEST</span>
             </div>
@@ -405,7 +413,10 @@ export function Dashboard() {
                     <strong>Backend Auto-Detection</strong>
                   </div>
                   <p>
-                    Detection method is automatically selected by the backend (TF-IDF + Isolation Forest &amp; semantic clustering) with an optimal 10% anomaly threshold.
+                    The backend fits a detector to this upload and flags unusual events within
+                    it. Larger varied files use TF-IDF + Isolation Forest; small or repetitive
+                    files use a template-frequency baseline. The 10% setting is an estimate,
+                    not a guarantee or accuracy score.
                   </p>
                 </div>
               </div>
@@ -497,10 +508,16 @@ export function Dashboard() {
                 <Metric label="Clusters" value={clusters.length.toLocaleString()} />
                 <Metric label="Alert groups" value={groupCount.toLocaleString()} />
                 <Metric
-                  label="Anomaly rate"
+                  label="Flagged events"
                   value={`${((anomalies.length / result.events.length) * 100 || 0).toFixed(1)}%`}
                 />
               </section>
+              <p className="evaluation-note">
+                These are unusual patterns in this upload—not confirmed incidents, and not
+                predictions from a model previously trained on another dataset. Precision,
+                recall, and F1 require known labels; metrics shown for labels in this same
+                upload are in-sample, not an independent test.
+              </p>
               {anomalies.length / result.events.length > contamination && (
                 <p className="tie-note">
                   The flagged rate is above the configured {Math.round(contamination * 100)}%
@@ -514,7 +531,7 @@ export function Dashboard() {
                   <Metric label="Precision" value={evaluation.precision.toFixed(3)} />
                   <Metric label="Recall" value={evaluation.recall.toFixed(3)} />
                   <Metric label="F1 score" value={evaluation.f1.toFixed(3)} />
-                  <div className="evaluation-note">Calculated from the uploaded per-event labels.</div>
+                  <div className="evaluation-note">Compared with labels in this same upload (not held-out test data).</div>
                 </section>
               )}
 

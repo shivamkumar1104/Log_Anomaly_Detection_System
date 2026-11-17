@@ -41,6 +41,13 @@ Open http://localhost:3000. The backend base URL can be changed with
 `NEXT_PUBLIC_API_BASE_URL`. Keep the API bound to localhost unless authentication,
 authorization, and deployment security are configured.
 
+Local uploads default to a 100 MB limit (`LOG_ANOMALY_MAX_UPLOAD_MB` in `backend/.env`).
+The frontend reads the active limit from the backend health endpoint. The Render Free
+configuration intentionally stays at 25 MB. Processing large files holds parsed events and
+analysis results in memory; use a machine with ample available RAM, and split very large log
+files if analysis runs out of memory or takes too long. Raising an upload limit does not
+provide streaming or background processing.
+
 ## Checks
 
 ```powershell
