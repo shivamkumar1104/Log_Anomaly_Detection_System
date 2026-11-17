@@ -18,7 +18,7 @@ services:
       - key: LOG_ANOMALY_DATABASE_PATH
         value: data/log_anomaly.db
       - key: LOG_ANOMALY_MAX_UPLOAD_MB
-        value: "250"
+        value: "25"
       - key: LOG_ANOMALY_GROUP_WINDOW_MINUTES
         value: "5"
       - key: LOG_ANOMALY_FRONTEND_ORIGIN

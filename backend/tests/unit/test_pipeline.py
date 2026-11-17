@@ -26,6 +26,16 @@ def test_csv_ingestion_maps_fields_and_labels() -> None:
     assert events.loc[0, "message"] == "failed request"
 
 
+def test_csv_ingestion_prefers_event_template_over_raw_content() -> None:
+    events, *_ = parse_log_file(
+        "hdfs_structured.csv",
+        b"EventTemplate,Content,EventId\n"
+        b"request block blk_<*>,request block blk_123456789,E1\n",
+    )
+
+    assert events.loc[0, "message"] == "request block blk_<*>"
+
+
 def test_java_stack_trace_is_merged_into_starting_event() -> None:
     events, file_format, _, _ = parse_log_file(
         "application.log",

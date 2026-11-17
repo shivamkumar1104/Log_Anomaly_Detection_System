@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from log_anomaly.api.visualization import router as visualization_router
 from log_anomaly.ingestion.parser import (
     MAX_UPLOAD_BYTES,
+    MAX_UPLOAD_MB,
     IngestionError,
     parse_log_file,
 )
@@ -107,9 +108,9 @@ def favicon() -> Response:
 
 @app.get("/health")
 @app.get("/api/health")
-def health() -> dict[str, str]:
+def health() -> dict[str, str | int]:
     """Report API process health."""
-    return {"status": "ok"}
+    return {"status": "ok", "max_upload_mb": MAX_UPLOAD_MB}
 
 
 @app.post("/api/upload")

@@ -14,14 +14,25 @@ def test_api_health_route() -> None:
     response = client.get("/api/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json() == {"status": "ok", "max_upload_mb": api_module.MAX_UPLOAD_MB}
 
 
 def test_health_endpoint() -> None:
     response = client.get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json() == {"status": "ok", "max_upload_mb": api_module.MAX_UPLOAD_MB}
+
+
+def test_upload_endpoint_rejects_files_over_configured_limit(monkeypatch) -> None:
+    monkeypatch.setattr(api_module, "MAX_UPLOAD_BYTES", 1)
+
+    response = client.post(
+        "/api/upload",
+        files={"file": ("sample.log", b"xx", "text/plain")},
+    )
+
+    assert response.status_code == 413
 
 
 def test_analyze_endpoint_uses_shared_pipeline() -> None:

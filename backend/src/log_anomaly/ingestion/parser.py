@@ -14,7 +14,10 @@ from uuid import uuid4
 import pandas as pd
 from charset_normalizer import from_bytes
 
-MAX_UPLOAD_BYTES = int(os.getenv("LOG_ANOMALY_MAX_UPLOAD_MB", "25")) * 1024 * 1024
+MAX_UPLOAD_MB = int(os.getenv("LOG_ANOMALY_MAX_UPLOAD_MB", "100"))
+if not 1 <= MAX_UPLOAD_MB <= 1024:
+    raise ValueError("LOG_ANOMALY_MAX_UPLOAD_MB must be between 1 and 1024.")
+MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 _APACHE = re.compile(
     r'^(?P<host>\S+) \S+ \S+ \[(?P<timestamp>[^\]]+)\] '
     r'"(?P<request>[^"]*)" (?P<status>\d{3}) (?P<size>\S+)'
@@ -28,15 +31,34 @@ _JAVA_START = re.compile(
 _GENERIC_START = re.compile(r"^(?P<timestamp>\d{4}-\d\d-\d\d[T ][\d:.,+-]+)\s+(?P<body>.*)")
 _LEVEL = re.compile(r"\b(TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL|CRITICAL)\b", re.I)
 _ALIASES = {
-    "message": {"message", "msg", "log", "content", "event", "text"},
+    "message": {
+        "message",
+        "msg",
+        "log",
+        "content",
+        "event",
+        "text",
+        "eventtemplate",
+        "event_template",
+    },
     "timestamp": {"timestamp", "time", "datetime", "date"},
     "severity": {"severity", "level", "log_level"},
     "host": {"host", "hostname", "machine"},
     "service": {"service", "application", "app"},
     "source": {"source", "logger", "component"},
-    "label": {"label", "anomaly", "is_anomaly", "ground_truth"},
+    "label": {"label", "anomaly", "is_anomaly", "ground_truth", "target"},
 }
 _MESSAGE_ALIASES = _ALIASES["message"]
+_MESSAGE_COLUMN_PRIORITY = (
+    "eventtemplate",
+    "event_template",
+    "message",
+    "msg",
+    "content",
+    "log",
+    "event",
+    "text",
+)
 
 
 class IngestionError(ValueError):
@@ -235,10 +257,19 @@ def _parse_csv(text: str) -> list[dict[str, Any]]:
     for column in frame.columns:
         normalized = str(column).strip().lower()
         for field, aliases in _ALIASES.items():
-            if normalized in aliases:
+            if field != "message" and normalized in aliases:
                 column_map[field] = column
                 break
-    if "message" not in column_map:
+    column_map["message"] = next(
+        (
+            column
+            for alias in _MESSAGE_COLUMN_PRIORITY
+            for column in frame.columns
+            if str(column).strip().lower() == alias
+        ),
+        "",
+    )
+    if not column_map.get("message"):
         raise IngestionError(
             "CSV must have a message column (for example: message, log, content, or text)."
         )
