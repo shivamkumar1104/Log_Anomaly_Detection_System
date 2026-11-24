@@ -18,7 +18,7 @@ services:
       - key: LOG_ANOMALY_DATABASE_PATH
         value: data/log_anomaly.db
       - key: LOG_ANOMALY_MAX_UPLOAD_MB
-        value: "250"
+        value: "100"
       - key: LOG_ANOMALY_GROUP_WINDOW_MINUTES
         value: "5"
       - key: LOG_ANOMALY_FRONTEND_ORIGIN
@@ -26,6 +26,8 @@ services:
           type: web
           name: log-anomaly-frontend
           property: host
+      - key: LOG_ANOMALY_API_KEY
+        sync: false
 
   # Frontend Dashboard (Next.js)
   - type: web
@@ -40,4 +42,6 @@ services:
       - key: NODE_VERSION
         value: 20.18.0
       - key: NEXT_PUBLIC_API_BASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_API_KEY
         sync: false

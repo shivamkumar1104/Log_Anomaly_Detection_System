@@ -97,7 +97,7 @@ def _explanation(row: pd.Series, method: str, counts: pd.Series) -> str:
         return f"Template occurred {template_frequency} time(s) in this file."
     if method == "clustering":
         cluster_id = row.get("cluster_id", "Unknown")
-        if cluster_id == "Outlier":
+        if str(cluster_id).startswith("Outlier"):
             return (
                 "Cluster outlier (density noise): does not match any normal log pattern. "
                 f"Template occurred {template_frequency} time(s)."

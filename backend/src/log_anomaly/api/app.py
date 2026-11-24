@@ -8,14 +8,16 @@ from io import StringIO
 from typing import Annotated, Any, Literal
 
 import pandas as pd
-from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
+from log_anomaly.api.auth import require_api_key
 from log_anomaly.api.visualization import router as visualization_router
 from log_anomaly.ingestion.parser import (
     MAX_UPLOAD_BYTES,
+    MAX_UPLOAD_MB,
     IngestionError,
     parse_log_file,
 )
@@ -32,7 +34,14 @@ app = FastAPI(
     version="0.2.0",
 )
 raw_origins = os.getenv("LOG_ANOMALY_FRONTEND_ORIGIN", "http://localhost:3000")
-configured_origins = [orig.strip() for orig in raw_origins.split(",") if orig.strip()]
+configured_origins = []
+for origin in raw_origins.split(","):
+    origin = origin.strip()
+    if not origin:
+        continue
+    if "://" not in origin:
+        origin = f"https://{origin}"
+    configured_origins.append(origin)
 allowed_origins = list(
     set(
         configured_origins
@@ -46,12 +55,15 @@ allowed_origins = list(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_origin_regex=r"https?://.*\.onrender\.com",
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.include_router(visualization_router, prefix="/api")
+app.include_router(
+    visualization_router,
+    prefix="/api",
+    dependencies=[Depends(require_api_key)],
+)
 
 
 class AnalysisRequest(BaseModel):
@@ -107,12 +119,12 @@ def favicon() -> Response:
 
 @app.get("/health")
 @app.get("/api/health")
-def health() -> dict[str, str]:
+def health() -> dict[str, str | int]:
     """Report API process health."""
-    return {"status": "ok"}
+    return {"status": "ok", "max_upload_mb": MAX_UPLOAD_MB}
 
 
-@app.post("/api/upload")
+@app.post("/api/upload", dependencies=[Depends(require_api_key)])
 async def upload_and_analyze(
     file: Annotated[UploadFile, File()],
     method: Literal["auto", "isolation_forest", "baseline", "clustering"] = Form("auto"),
@@ -127,13 +139,27 @@ async def upload_and_analyze(
             status_code=415,
             detail="Unsupported file type. Upload a .csv, .txt, .log, or .pdf file.",
         )
+    if file.size is not None and file.size > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Uploaded file exceeds the size limit.")
 
-    content = await file.read(MAX_UPLOAD_BYTES + 1)
+    content = bytearray()
+    while True:
+        remaining = MAX_UPLOAD_BYTES + 1 - len(content)
+        if remaining <= 0:
+            break
+        chunk = await file.read(min(1024 * 1024, remaining))
+        if not chunk:
+            break
+        content.extend(chunk)
+        if len(content) > MAX_UPLOAD_BYTES:
+            break
     await file.close()
     if len(content) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="Uploaded file exceeds the size limit.")
     try:
-        events, file_format, confidence, source_encoding = parse_log_file(filename, content)
+        events, file_format, confidence, source_encoding = parse_log_file(
+            filename, bytes(content)
+        )
     except IngestionError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     results = _analyze(events, method, contamination, grouping_window_minutes)
@@ -162,8 +188,8 @@ async def upload_and_analyze(
     }
 
 
-@app.post("/api/analyze")
-@app.post("/api/v1/analyze")
+@app.post("/api/analyze", dependencies=[Depends(require_api_key)])
+@app.post("/api/v1/analyze", dependencies=[Depends(require_api_key)])
 def analyze(request: AnalysisRequest) -> dict[str, Any]:
     """Analyze normalized event records with the same workflow used for file uploads."""
     results = _analyze(
@@ -175,13 +201,13 @@ def analyze(request: AnalysisRequest) -> dict[str, Any]:
     return {"events": _serialize_events(results)}
 
 
-@app.get("/api/analyses")
+@app.get("/api/analyses", dependencies=[Depends(require_api_key)])
 def list_analyses(limit: int = Query(default=50, ge=1, le=500)) -> dict[str, Any]:
     """List recent persisted analysis summaries."""
     return {"analyses": store.list_analyses(limit=limit)}
 
 
-@app.get("/api/analyses/{analysis_id}")
+@app.get("/api/analyses/{analysis_id}", dependencies=[Depends(require_api_key)])
 def get_analysis(analysis_id: str) -> dict[str, Any]:
     """Get one persisted analysis and its result events."""
     analysis = store.get_analysis(analysis_id)
@@ -190,7 +216,10 @@ def get_analysis(analysis_id: str) -> dict[str, Any]:
     return analysis
 
 
-@app.get("/api/analyses/{analysis_id}/export")
+@app.get(
+    "/api/analyses/{analysis_id}/export",
+    dependencies=[Depends(require_api_key)],
+)
 def export_analysis(
     analysis_id: str,
     format: Literal["pdf", "xlsx"] = Query(...),
@@ -214,13 +243,13 @@ def export_analysis(
     )
 
 
-@app.get("/api/alerts")
+@app.get("/api/alerts", dependencies=[Depends(require_api_key)])
 def list_alerts(limit: int = Query(default=100, ge=1, le=500)) -> dict[str, Any]:
     """List anomalous events from recently persisted analyses."""
     return {"alerts": store.list_alerts(limit=limit)}
 
 
-@app.get("/api/alerts/export")
+@app.get("/api/alerts/export", dependencies=[Depends(require_api_key)])
 def export_alerts(format: Literal["csv", "json"] = Query(default="csv")) -> Response:
     """Export alert evidence from saved analyses as CSV or JSON."""
     alerts = store.list_alerts()

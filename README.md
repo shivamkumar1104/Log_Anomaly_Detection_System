@@ -33,6 +33,35 @@ rules, and alert grouping. The UI, API, and persistence layers will consume shar
 application services rather than duplicating detection logic. See
 [`docs/architecture.md`](docs/architecture.md) for the module boundaries and workflow.
 
+## Skills and technologies used
+
+This project uses the following practical development and engineering skills:
+
+- **Python backend development:** modular Python package design, type-safe application
+  services, configuration management, and reusable domain modules.
+- **FastAPI and REST API development:** validated file uploads, analysis, history, alerts,
+  exports, health checks, and interactive OpenAPI documentation.
+- **Log ingestion and preprocessing:** CSV/text/PDF parsing, encoding detection and
+  normalization, Java stack-trace merging, message cleanup, template extraction, and
+  sensitive-data masking.
+- **Machine learning for anomaly detection:** TF-IDF feature engineering, Isolation Forest,
+  frequency-based baselines, configurable anomaly scoring, and per-event evaluation using
+  precision, recall, and F1.
+- **Explainable detection:** rule-based severity assignment, score thresholds, evidence
+  preservation, and host/service/template/time-window alert grouping.
+- **Data and persistence engineering:** pandas/NumPy-based processing, local SQLite
+  storage, and structured CSV/JSON exports.
+- **Report generation:** PDF reports with ReportLab, Excel reports with openpyxl, and
+  text extraction from PDFs with pypdf.
+- **Frontend development:** Next.js, React, TypeScript, responsive dashboard design,
+  Tailwind CSS, and Recharts-based data visualization.
+- **Quality and maintainability:** unit and integration testing with pytest, linting with
+  Ruff and ESLint, production builds, environment-based configuration, and local-first
+  security practices for sensitive log data.
+
+**Note:** Streamlit is not part of the current application runtime. The dashboard is
+implemented with Next.js and communicates with the FastAPI backend.
+
 ## Windows setup (PowerShell)
 
 Create a Python virtual environment at the repository root:

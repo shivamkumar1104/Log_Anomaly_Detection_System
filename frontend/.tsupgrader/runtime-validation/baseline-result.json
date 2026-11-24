@@ -1,0 +1,94 @@
+{
+  "planHash": "64177b066eeaaeaac40a60861e145aa2c4eaa3e059efa9cc5ab81802af66a48d",
+  "phase": "baseline",
+  "recordedAtUtc": "2026-11-17T08:45:04.4336787Z",
+  "retryCount": 0,
+  "resetBaseline": true,
+  "complete": true,
+  "result": {
+    "setupSucceeded": true,
+    "setupDurationMs": 0,
+    "setupFailureOutput": null,
+    "assertions": [
+      {
+        "name": "production-build",
+        "kind": "process",
+        "verificationMethod": "exit-code",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 0,
+        "outputSample": "\r\n\u003E frontend@0.1.0 build\r\n\u003E next build --webpack\r\n\r\n\u25B2 Next.js 16.4.6 (webpack)\r\n- Environments: .env.local\r\n\u2713 Running next.config.ts took 288ms\r\n- Cache Components enabled\r\n- Partial Prefetching enabled\r\n\r\n  Creating an optimized production build ...\r\n\u2713 Compiled successfully in 12.4s\r\n  Running TypeScript ...\r\n  Finished TypeScript in 5.8s ...\r\n  Collecting page data using 5 workers ...\r\n  Generating static pages using 5 workers (0/4) ...\r\n  Generating static pages using 5 workers (1/4) \r\n  Generating static pages using 5 workers (2/4) \r\n  Generating static pages using 5 workers (3/4) \r\n\u2713 Generating static pages using 5 workers (4/4) in 2.6s\r\n  Finalizing page optimization ...\r\n  Collecting build traces ...\r\n\r\nRoute (app)\r\n\u250C \u25CB /\r\n\u2514 \u25CB /_not-found\r\n\r\n\r\n\u25CB  (Static)  prerendered as static content\r\n\r\n",
+        "durationMs": 53186
+      },
+      {
+        "name": "eslint-check",
+        "kind": "process",
+        "verificationMethod": "exit-code",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 0,
+        "outputSample": "\r\n\u003E frontend@0.1.0 lint\r\n\u003E eslint\r\n\r\n",
+        "durationMs": 16566
+      },
+      {
+        "name": "home-page-responds",
+        "kind": "http-probe",
+        "verificationMethod": "http-status",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": null,
+        "outputSample": "HTTP 200\n\u003C!DOCTYPE html\u003E\u003Chtml lang=\u0022en\u0022\u003E\u003Chead\u003E\u003Cmeta charSet=\u0022utf-8\u0022/\u003E\u003Cmeta name=\u0022viewport\u0022 content=\u0022width=device-width, initial-scale=1\u0022/\u003E\u003Clink rel=\u0022stylesheet\u0022 href=\u0022/_next/static/chunks/src_app_globals_css_1o9jubfkxlfx1.css\u0022 data-precedence=\u0022next_static/chunks/src_app_globals_css_1o9jubfkxlfx1.css\u0022/\u003E\u003Clink rel=\u0022preload\u0022 as=\u0022script\u0022 fetchPriority=\u0022low\u0022 href=\u0022/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_0oc3hfxhoz2c3._.js\u0022/\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_next_dist_compiled_next-devtools_index_090k2jmam7qwg.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/1daa_next_dist_compiled_react-dom_cjs_react-dom-client_development_0mp0cp_t-ezj9.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/1q96_modules_next_dist_compiled_react-dom_cjs_react-dom_development_1sqry0_53krp4.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_next_dist_compiled_react-dom_0grqycjrj6mju._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_164kp-67asdr9._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_next_dist_compiled_1amofcmz--cdp._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_next_dist_client_1ohys4wzsw--s._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_next_dist_1bjkg68unqmjx._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_%40swc_helpers_cjs_1r9vbqwj2323d._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/_1anvha4rlo79g._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/turbopack-_1nhx3glkvfrg4._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/_219uq1sj0q91c._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_next_dist_20wefz_f1k6jn._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/src_components_dashboard_tsx_0-vx9r60q78uj._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_next_dist_0rraq45b6w1wa._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Ctitle\u003EAnomaly Detect | Log Analysis\u003C/title\u003E\u003Cmeta name=\u0022description\u0022 content=\u0022Analyze log files, investigate anomalies, and export clean reports.\u0022/\u003E\u003Clink rel=\u0022icon\u0022 href=\u0022/favicon.ico?favicon.117ezoe8m31dk.ico\u0022 sizes=\u002248x48\u0022 type=\u0022image/x-icon\u0022/\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_next_dist_build_polyfills_polyfill-nomodule.js\u0022 noModule=\u0022\u0022\u003E\u003C/script\u003E\u003C/head\u003E\u003Cbody\u003E\u003Cdiv hidden=\u0022\u0022\u003E\u003C!--$--\u003E\u003C!--/$--\u003E\u003C/div\u003E\u003C!--\u0026--\u003E\u003Cmain class=\u0022app-shell\u0022\u003E\u003Cheader class=\u0022topbar\u0022\u003E\u003Ca class=\u0022brand\u0022 aria-label=\u0022Anomaly Detect home\u0022 href=\u0022/\u0022\u003E\u003Cspan class=\u0022brand-mark\u0022\u003EA\u003C/span\u003E\u003Cspan\u003EAnomaly Detect\u003C/span\u003E\u003C/a\u003E\u003Cdiv class=\u0022api-status offline\u0022\u003E\u003Cspan class=\u0022status-dot\u0022\u003E\u003C/span\u003EAPI disconnected\u003C/div\u003E\u003C/header\u003E\u003Cdiv class=\u0022layout\u0022\u003E\u003Caside class=\u0022sidebar\u0022\u003E\u003Cdiv class=\u0022sidebar-label\u0022\u003EWORKSPACE\u003C/div\u003E\u003Ca class=\u0022nav-item active\u0022 href=\u0022#analyze\u0022\u003E\u003Cspan\u003E\u25A4\u003C/span\u003E Analyze logs\u003C/a\u003E\u003Ca class=\u0022nav-item\u0022 href=\u0022#history\u0022\u003E\u003Cspan\u003E\u25F7\u003C/span\u003E Analysis history\u003C/a\u003E\u003Cdiv class=\u0022sidebar-note\u0022\u003E\u003Cspan class=\u0022note-icon\u0022\u003Ei\u003C/span\u003E\u003Cp\u003EAn anomaly is a signal to investigate\u2014not confirmation of an incident or cause.\u003C/p\u003E\u003C/div\u003E\u003Cdiv class=\u0022sidebar-footer\u0022\u003ELOCAL DEVELOPMENT \u00B7 v0.2\u003C/div\u003E\u003C/aside\u003E\u003Csection class=\u0022content\u0022\u003E\u003Cdiv class=\u0022page-heading\u0022\u003E\u003Cdiv\u003E\u003Cdiv class=\u0022eyebrow\u0022\u003EOBSERVABILITY / BATCH ANALYSIS\u003C/div\u003E\u003Ch1\u003ELog anomaly detection\u003C/h1\u003E\u003Cp\u003EFind unusual log patterns, inspect evidence, and reduce repetitive alerts.\u003C/p\u003E\u003C/div\u003E\u003C/div\u003E\u003Cdiv class=\u0022banner banner-warning\u0022 role=\u0022status\u0022\u003E\u003Cstrong\u003EBackend not connected.\u003C/strong\u003E Start the FastAPI server on port 8000, then refresh this page.\u003Ccode\u003Epython -m uvicorn log_anomaly.api.app:app --reload\u003C/code\u003E\u003C/div\u003E\u003Csection class=\u0022panel upload-panel\u0022 id=\u0022analyze\u0022\u003E\u003Cdiv class=\u0022panel-heading\u0022\u003E\u003Cdiv\u003E\u003Ch2\u003EUpload a log file\u003C/h2\u003E\u003Cp\u003ECSV, text logs, and text-based PDFs \u00B7 up to 25 MB\u003C/p\u003E\u003C/div\u003E\u003Cspan class=\u0022step-badge\u0022\u003E01 / INGEST\u003C/span\u003E\u003C/div\u003E\u003Cform\u003E\u003Clabel class=\u0022dropzone\u0022 for=\u0022log-file\u0022\u003E\u003Cinput accept=\u0022.csv,.txt,.log,.pdf\u0022 class=\u0022visually-hidden\u0022 id=\u0022log-file\u0022 type=\u0022file\u0022/\u003E\u003Cspan class=\u0022upload-icon\u0022\u003E\u2191\u003C/span\u003E\u003Cspan class=\u0022drop-title\u0022\u003EDrop your file here or browse\u003C/span\u003E\u003Cspan class=\u0022drop-hint\u0022\u003EEncoding is dete\n\u2026[truncated]",
+        "durationMs": 10442
+      }
+    ],
+    "executions": [
+      {
+        "source": "production-build",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "run",
+          "build"
+        ],
+        "cwd": "C:\\Users\\hp\\OneDrive\\Desktop\\Projects\\log_anomaly\\frontend",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "eslint-check",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "run",
+          "lint"
+        ],
+        "cwd": "C:\\Users\\hp\\OneDrive\\Desktop\\Projects\\log_anomaly\\frontend",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "home-page-responds",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "run",
+          "dev",
+          "--",
+          "--hostname",
+          "127.0.0.1",
+          "--port",
+          "3000"
+        ],
+        "cwd": "C:\\Users\\hp\\OneDrive\\Desktop\\Projects\\log_anomaly\\frontend",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      }
+    ]
+  }
+}
