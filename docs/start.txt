@@ -1,0 +1,15 @@
+Terminal 1 — Backend (FastAPI)
+
+cd C:\Users\hp\OneDrive\Desktop\Projects\log_anomaly\backend
+..\\.venv\Scripts\python.exe -m uvicorn log_anomaly.api.app:app --reload --host 127.0.0.1 --port 8000 --env-file .env
+
+Terminal 2 — Frontend (Next.js)
+
+cd C:\Users\hp\OneDrive\Desktop\Projects\log_anomaly
+npm --prefix frontend run dev
+
+
+Terminal 3 — Database (SQLite viewer, optional)
+
+cd C:\Users\hp\OneDrive\Desktop\Projects\log_anomaly\backend
+..\\.venv\Scripts\python.exe -c "import sqlite3, json; conn = sqlite3.connect('data/log_anomaly.db'); print([r[0] for r in conn.execute(\"SELECT name FROM sqlite_master WHERE type='table'\").fetchall()])"
