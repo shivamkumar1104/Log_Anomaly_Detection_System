@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+import numpy as np
 import pandas as pd
 from sklearn.cluster import DBSCAN
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -73,6 +74,20 @@ def cluster_log_events(
         result["cluster_id"] = f"Cluster 1: {meaning}"
         return result
 
+    positions: dict[str, int] = {}
+    first_positions: list[int] = []
+    inverse_positions = np.empty(len(messages), dtype=np.intp)
+    sample_weights: list[int] = []
+    for index, message in enumerate(messages):
+        position = positions.get(message)
+        if position is None:
+            position = len(first_positions)
+            positions[message] = position
+            first_positions.append(index)
+            sample_weights.append(0)
+        inverse_positions[index] = position
+        sample_weights[position] += 1
+
     vectorizer = TfidfVectorizer(token_pattern=r"(?u)\b\w+\b")
     try:
         matrix = vectorizer.fit_transform(messages)
@@ -86,19 +101,30 @@ def cluster_log_events(
         result["cluster_id"] = f"Cluster 1: {meaning}"
         return result
 
-    # DBSCAN with cosine distance
-    clusterer = DBSCAN(eps=eps, min_samples=min_samples, metric="cosine")
-    raw_labels = clusterer.fit_predict(matrix)
+    unique_matrix = matrix[first_positions]
+    del matrix
 
-    # Order clusters by size: largest cluster = Cluster 1, next = Cluster 2, etc.
-    valid_labels = [label for label in raw_labels if label != -1]
-    label_counts = pd.Series(valid_labels).value_counts().to_dict()
+    # Repeated templates have identical vectors; DBSCAN sample weights preserve their
+    # contribution to cluster density without clustering each duplicate separately.
+    clusterer = DBSCAN(eps=eps, min_samples=min_samples, metric="cosine")
+    unique_labels = clusterer.fit_predict(unique_matrix, sample_weight=sample_weights)
+    raw_labels = unique_labels[inverse_positions]
+
+    cluster_sizes: dict[int, int] = {}
+    for label, weight in zip(unique_labels, sample_weights, strict=True):
+        if label != -1:
+            cluster_sizes[int(label)] = cluster_sizes.get(int(label), 0) + weight
+    cluster_indices: dict[int, list[int]] = {}
+    for index, label in enumerate(raw_labels):
+        if label != -1:
+            cluster_indices.setdefault(int(label), []).append(index)
+
+    # Order clusters by event count: largest cluster = Cluster 1, next = Cluster 2, etc.
+    ordered_labels = sorted(cluster_sizes, key=lambda label: (-cluster_sizes[label], label))
 
     label_mapping = {}
-    for rank, (label, _) in enumerate(
-        sorted(label_counts.items(), key=lambda item: (-item[1], item[0]))
-    ):
-        sub_df = result.iloc[[i for i, lbl in enumerate(raw_labels) if lbl == label]]
+    for rank, label in enumerate(ordered_labels):
+        sub_df = result.iloc[cluster_indices[label]]
         meaning = _extract_cluster_meaning(sub_df)
         label_mapping[label] = f"Cluster {rank + 1}: {meaning}"
 

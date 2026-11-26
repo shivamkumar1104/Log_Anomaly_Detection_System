@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from io import StringIO
+from threading import Lock
 from typing import Annotated, Any, Literal
+from uuid import uuid4
 
 import pandas as pd
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
@@ -27,6 +30,9 @@ from log_anomaly.service import analyze_batch
 
 DATABASE_PATH = os.getenv("LOG_ANOMALY_DATABASE_PATH", "data/log_anomaly.db")
 store = SQLiteStore(DATABASE_PATH)
+logger = logging.getLogger(__name__)
+_upload_jobs: dict[str, dict[str, Any]] = {}
+_upload_jobs_lock = Lock()
 
 app = FastAPI(
     title="Anomaly Detect API",
@@ -96,6 +102,76 @@ def _analyze(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+def _update_upload_job(job_id: str, **updates: Any) -> None:
+    with _upload_jobs_lock:
+        job = _upload_jobs.get(job_id)
+        if job is not None:
+            job.update(updates)
+
+
+def _process_upload_job(
+    job_id: str,
+    filename: str,
+    content: bytes,
+    method: str,
+    contamination: float,
+    grouping_window_minutes: int,
+) -> None:
+    _update_upload_job(job_id, status="processing", stage="Parsing log file")
+    try:
+        events, file_format, confidence, source_encoding = parse_log_file(filename, content)
+        _update_upload_job(job_id, stage="Analyzing log events")
+        results = _analyze(events, method, contamination, grouping_window_minutes)
+        selected_method = str(results["detection_method"].iloc[0])
+
+        _update_upload_job(job_id, stage="Saving analysis")
+        analysis_id = store.save_analysis(
+            results,
+            filename=filename,
+            file_format=file_format,
+            source_encoding=source_encoding,
+            method=selected_method,
+        )
+    except IngestionError as exc:
+        _update_upload_job(job_id, status="failed", stage="Upload failed", detail=str(exc))
+        return
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, str) else "Analysis failed."
+        _update_upload_job(job_id, status="failed", stage="Analysis failed", detail=detail)
+        return
+    except (OSError, ValueError):
+        logger.exception("Could not save upload job %s", job_id)
+        _update_upload_job(
+            job_id,
+            status="failed",
+            stage="Saving failed",
+            detail="Could not save analysis results.",
+        )
+        return
+    except Exception:
+        logger.exception("Unexpected error while processing upload job %s", job_id)
+        _update_upload_job(
+            job_id,
+            status="failed",
+            stage="Analysis failed",
+            detail="An unexpected error occurred while analyzing this file.",
+        )
+        return
+
+    _update_upload_job(
+        job_id,
+        status="completed",
+        stage="Analysis complete",
+        analysis_id=analysis_id,
+        file_format=file_format,
+        format_confidence=confidence,
+        source_encoding=source_encoding,
+        method=selected_method,
+        configured_anomaly_rate=contamination,
+        grouping_window_minutes=grouping_window_minutes,
+    )
+
+
 @app.get("/")
 def root() -> dict[str, Any]:
     """Root endpoint to guide users and confirm backend status."""
@@ -124,14 +200,15 @@ def health() -> dict[str, str | int]:
     return {"status": "ok", "max_upload_mb": MAX_UPLOAD_MB}
 
 
-@app.post("/api/upload", dependencies=[Depends(require_api_key)])
+@app.post("/api/upload", status_code=202, dependencies=[Depends(require_api_key)])
 async def upload_and_analyze(
     file: Annotated[UploadFile, File()],
+    background_tasks: BackgroundTasks,
     method: Literal["auto", "isolation_forest", "baseline", "clustering"] = Form("auto"),
     contamination: float = Form(0.1, ge=0.01, le=0.5),
     grouping_window_minutes: int = Form(5, ge=1, le=1440),
-) -> dict[str, Any]:
-    """Validate, parse, analyze, and persist one CSV, text, or text-based PDF upload."""
+) -> dict[str, str]:
+    """Accept an upload and process it in the background."""
     filename = (file.filename or "").replace("\\", "/").rsplit("/", 1)[-1].strip()
     suffix = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if suffix not in {"csv", "txt", "log", "pdf"}:
@@ -156,36 +233,34 @@ async def upload_and_analyze(
     await file.close()
     if len(content) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="Uploaded file exceeds the size limit.")
-    try:
-        events, file_format, confidence, source_encoding = parse_log_file(
-            filename, bytes(content)
-        )
-    except IngestionError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    results = _analyze(events, method, contamination, grouping_window_minutes)
-    selected_method = str(results["detection_method"].iloc[0])
-    try:
-        analysis_id = store.save_analysis(
-            results,
-            filename=filename,
-            file_format=file_format,
-            source_encoding=source_encoding,
-            method=selected_method,
-        )
-    except (OSError, ValueError) as exc:
-        raise HTTPException(status_code=500, detail="Could not persist analysis results.") from exc
-    return {
-        "analysis_id": analysis_id,
-        "filename": filename,
-        "file_format": file_format,
-        "format_confidence": confidence,
-        "source_encoding": source_encoding,
-        "normalized_encoding": "utf-8",
-        "method": selected_method,
-        "configured_anomaly_rate": contamination,
-        "grouping_window_minutes": grouping_window_minutes,
-        "events": _serialize_events(results),
-    }
+
+    job_id = str(uuid4())
+    with _upload_jobs_lock:
+        _upload_jobs[job_id] = {
+            "job_id": job_id,
+            "status": "queued",
+            "stage": "Queued for analysis",
+        }
+    background_tasks.add_task(
+        _process_upload_job,
+        job_id,
+        filename,
+        bytes(content),
+        method,
+        contamination,
+        grouping_window_minutes,
+    )
+    return {"job_id": job_id, "status": "queued"}
+
+
+@app.get("/api/uploads/{job_id}", dependencies=[Depends(require_api_key)])
+def get_upload_status(job_id: str) -> dict[str, Any]:
+    """Return the processing stage and result identifier for an upload job."""
+    with _upload_jobs_lock:
+        job = _upload_jobs.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Upload job not found.")
+        return dict(job)
 
 
 @app.post("/api/analyze", dependencies=[Depends(require_api_key)])

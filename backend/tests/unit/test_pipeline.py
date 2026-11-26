@@ -229,3 +229,33 @@ def test_clustering_groups_similar_logs_and_flags_outlier() -> None:
     assert outlier_event["is_anomaly"]
     assert outlier_event["anomaly_score"] > result.iloc[0]["anomaly_score"]
     assert "cluster" in outlier_event["explanation"].lower()
+
+
+def test_clustering_compresses_duplicate_templates(monkeypatch) -> None:
+    from log_anomaly.grouping import cluster as cluster_module
+
+    original_dbscan = cluster_module.DBSCAN
+    observed: dict[str, object] = {}
+
+    class RecordingDBSCAN:
+        def __init__(self, **kwargs):
+            self.model = original_dbscan(**kwargs)
+
+        def fit_predict(self, matrix, sample_weight=None):
+            observed["row_count"] = matrix.shape[0]
+            observed["sample_weights"] = list(sample_weight)
+            return self.model.fit_predict(matrix, sample_weight=sample_weight)
+
+    monkeypatch.setattr(cluster_module, "DBSCAN", RecordingDBSCAN)
+    events = pd.DataFrame(
+        {
+            "message": ["routine login succeeded"] * 100
+            + ["database connected"] * 50
+            + ["critical kernel corruption"]
+        }
+    )
+
+    result = cluster_module.cluster_log_events(events)
+
+    assert observed == {"row_count": 3, "sample_weights": [100, 50, 1]}
+    assert len(result) == len(events)

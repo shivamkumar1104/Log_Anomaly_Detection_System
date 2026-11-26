@@ -11,6 +11,14 @@ client = TestClient(app)
 client.headers.update({"Authorization": "Bearer test-api-key"})
 
 
+def _upload_status(response):
+    assert response.status_code == 202
+    job_id = response.json()["job_id"]
+    status = client.get(f"/api/uploads/{job_id}")
+    assert status.status_code == 200
+    return status.json()
+
+
 def test_api_health_route() -> None:
     response = client.get("/api/health")
 
@@ -91,10 +99,10 @@ def test_upload_endpoint_parses_analyzes_and_persists_text_file(tmp_path) -> Non
         data={"method": "baseline"},
     )
 
-    assert response.status_code == 200
-    payload = response.json()
+    job = _upload_status(response)
+    assert job["status"] == "completed"
+    payload = client.get(f"/api/analyses/{job['analysis_id']}").json()
     assert payload["filename"] == "sample_logs.txt"
-    assert payload["normalized_encoding"] == "utf-8"
     assert payload["events"]
     assert payload["events"][0]["message"] == "Application started"
     assert "analysis_id" in payload
@@ -108,8 +116,9 @@ def test_upload_endpoint_rejects_unsupported_pdf_payload(tmp_path) -> None:
         files={"file": ("paper.pdf", b"not a PDF", "application/pdf")},
     )
 
-    assert response.status_code == 422
-    assert "not a valid PDF" in response.json()["detail"]
+    job = _upload_status(response)
+    assert job["status"] == "failed"
+    assert "not a valid PDF" in job["detail"]
 
 
 def test_history_and_alert_exports_read_persisted_analysis(tmp_path) -> None:
@@ -233,9 +242,11 @@ def test_pdf_upload_extracts_text_logs(tmp_path) -> None:
         data={"method": "baseline"},
     )
 
-    assert response.status_code == 200
-    assert response.json()["file_format"].startswith("pdf/")
-    assert response.json()["events"][0]["severity"] == "ERROR"
+    job = _upload_status(response)
+    assert job["status"] == "completed"
+    analysis = client.get(f"/api/analyses/{job['analysis_id']}").json()
+    assert analysis["file_format"].startswith("pdf/")
+    assert analysis["events"][0]["severity"] == "ERROR"
 
 
 def test_upload_endpoint_normalizes_cp1252_csv(tmp_path) -> None:
@@ -252,9 +263,11 @@ def test_upload_endpoint_normalizes_cp1252_csv(tmp_path) -> None:
         data={"method": "baseline"},
     )
 
-    assert response.status_code == 200
-    assert response.json()["source_encoding"] == "cp1252"
-    assert response.json()["events"][0]["message"] == "café"
+    job = _upload_status(response)
+    assert job["status"] == "completed"
+    analysis = client.get(f"/api/analyses/{job['analysis_id']}").json()
+    assert analysis["source_encoding"] == "cp1252"
+    assert analysis["events"][0]["message"] == "café"
 
 
 def test_upload_endpoint_rejects_scanned_pdf(tmp_path) -> None:
@@ -270,8 +283,9 @@ def test_upload_endpoint_rejects_scanned_pdf(tmp_path) -> None:
         files={"file": ("scanned.pdf", output.getvalue(), "application/pdf")},
     )
 
-    assert response.status_code == 422
-    assert "OCR" in response.json()["detail"]
+    job = _upload_status(response)
+    assert job["status"] == "failed"
+    assert "OCR" in job["detail"]
 
 
 def test_upload_endpoint_rejects_unsupported_file_type() -> None:

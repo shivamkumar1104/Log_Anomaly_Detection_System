@@ -23,6 +23,7 @@ const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8000";
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY ?? "";
 const ACCEPTED_EXTENSIONS = new Set(["csv", "txt", "log", "pdf"]);
+const EVENT_PAGE_SIZE = 100;
 
 function apiHeaders(): HeadersInit {
   return API_KEY ? { Authorization: `Bearer ${API_KEY}` } : {};
@@ -64,6 +65,13 @@ type AnalysisSummary = {
   source_encoding: string;
   method: string;
   event_count: number;
+};
+
+type UploadJobStatus = {
+  status: "queued" | "processing" | "completed" | "failed";
+  stage: string;
+  analysis_id?: string;
+  detail?: string;
 };
 
 type PageView = "upload" | "analytics" | "logs" | "history";
@@ -118,9 +126,14 @@ export function Dashboard() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadPhase, setUploadPhase] = useState<"uploading" | "processing" | "loading" | null>(
+    null,
+  );
+  const [uploadStage, setUploadStage] = useState("");
   const [method] = useState("auto");
   const [selectedCluster, setSelectedCluster] = useState<string | null>(null);
   const [viewFilter, setViewFilter] = useState<"anomalies" | "normal" | "all">("anomalies");
+  const [eventPage, setEventPage] = useState(0);
 
   const refreshHistory = useCallback(async () => {
     try {
@@ -353,6 +366,8 @@ export function Dashboard() {
     }
     setBusy(true);
     setUploadProgress(0);
+    setUploadPhase("uploading");
+    setUploadStage("Uploading file");
     setError("");
     const body = new FormData();
     body.append("file", file);
@@ -360,7 +375,7 @@ export function Dashboard() {
     body.append("contamination", String(contamination));
     body.append("grouping_window_minutes", String(groupingWindow));
     try {
-      const payload = await new Promise<AnalysisResult>((resolve, reject) => {
+      const accepted = await new Promise<{ job_id: string }>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open("POST", `${API_BASE}/api/upload`);
         if (API_KEY) xhr.setRequestHeader("Authorization", `Bearer ${API_KEY}`);
@@ -372,7 +387,7 @@ export function Dashboard() {
         xhr.onload = () => {
           if (xhr.status >= 200 && xhr.status < 300) {
             try {
-              resolve(JSON.parse(xhr.responseText) as AnalysisResult);
+              resolve(JSON.parse(xhr.responseText) as { job_id: string });
             } catch {
               reject(new Error("Server returned invalid response."));
             }
@@ -388,16 +403,38 @@ export function Dashboard() {
         xhr.onerror = () => reject(new Error("Could not connect to the backend API. Please make sure the backend is running."));
         xhr.send(body);
       });
-      setResult(payload);
-      setSelectedCluster(null);
-      setViewFilter("anomalies");
-      setActiveView("analytics"); // automatically navigate to visual analytics
-      await refreshHistory();
+      if (!accepted.job_id) throw new Error("The server did not return an upload job ID.");
+      setUploadPhase("processing");
+      setUploadStage("Waiting for analysis");
+
+      while (true) {
+        await new Promise((resolve) => window.setTimeout(resolve, 800));
+        const response = await fetch(`${API_BASE}/api/uploads/${accepted.job_id}`, {
+          cache: "no-store",
+          headers: apiHeaders(),
+        });
+        if (!response.ok) throw new Error(await readError(response));
+        const job = (await response.json()) as UploadJobStatus;
+        setUploadStage(job.stage);
+        if (job.status === "failed") {
+          throw new Error(job.detail ?? "The server could not analyze this file.");
+        }
+        if (job.status === "completed") {
+          if (!job.analysis_id) throw new Error("The completed job has no analysis ID.");
+          setUploadPhase("loading");
+          setUploadStage("Loading analysis results");
+          await openAnalysis(job.analysis_id);
+          await refreshHistory();
+          break;
+        }
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Analysis failed.");
     } finally {
       setBusy(false);
       setUploadProgress(0);
+      setUploadPhase(null);
+      setUploadStage("");
     }
   }
 
@@ -413,6 +450,7 @@ export function Dashboard() {
       setResult((await response.json()) as AnalysisResult);
       setSelectedCluster(null);
       setViewFilter("anomalies");
+      setEventPage(0);
       setActiveView("analytics");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not load this analysis.");
@@ -433,6 +471,12 @@ export function Dashboard() {
     }
     return list;
   }, [viewFilter, result, anomalies, normalEvents, selectedCluster]);
+  const pageCount = Math.max(1, Math.ceil(displayedEvents.length / EVENT_PAGE_SIZE));
+  const visibleEventPage = Math.min(eventPage, pageCount - 1);
+  const visibleEvents = displayedEvents.slice(
+    visibleEventPage * EVENT_PAGE_SIZE,
+    (visibleEventPage + 1) * EVENT_PAGE_SIZE,
+  );
 
   const exportEvents = result?.events.filter(
     (event) => !excludeAnomalies || !event.is_anomaly,
@@ -682,9 +726,22 @@ export function Dashboard() {
                   </div>
 
                   {busy && (
-                    <div className="upload-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploadProgress}>
-                      <span style={{ width: `${uploadProgress}%` }} />
-                      <small>{uploadProgress > 0 ? `Uploading: ${uploadProgress}%` : "Processing logs..."}</small>
+                    <div
+                      className={`upload-progress ${uploadPhase === "uploading" ? "" : "upload-progress-indeterminate"}`}
+                      role={uploadPhase === "uploading" ? "progressbar" : "status"}
+                      aria-live={uploadPhase === "uploading" ? undefined : "polite"}
+                      aria-valuemin={uploadPhase === "uploading" ? 0 : undefined}
+                      aria-valuemax={uploadPhase === "uploading" ? 100 : undefined}
+                      aria-valuenow={uploadPhase === "uploading" ? uploadProgress : undefined}
+                    >
+                      <span
+                        style={uploadPhase === "uploading" ? { width: `${uploadProgress}%` } : undefined}
+                      />
+                      <small>
+                        {uploadPhase === "uploading"
+                          ? `Uploading: ${uploadProgress}%`
+                          : uploadStage || "Processing logs"}
+                      </small>
                     </div>
                   )}
                 </form>
@@ -951,6 +1008,7 @@ export function Dashboard() {
                               style={{ fontSize: "11px", padding: "4px 8px" }}
                               onClick={() => {
                                 setSelectedCluster(c.name);
+                                setEventPage(0);
                                 setActiveView("logs");
                               }}
                               type="button"
@@ -1034,6 +1092,7 @@ export function Dashboard() {
                       onClick={() => {
                         setViewFilter("anomalies");
                         setSelectedCluster(null);
+                        setEventPage(0);
                       }}
                       type="button"
                     >
@@ -1044,6 +1103,7 @@ export function Dashboard() {
                       onClick={() => {
                         setViewFilter("normal");
                         setSelectedCluster(null);
+                        setEventPage(0);
                       }}
                       type="button"
                     >
@@ -1054,6 +1114,7 @@ export function Dashboard() {
                       onClick={() => {
                         setViewFilter("all");
                         setSelectedCluster(null);
+                        setEventPage(0);
                       }}
                       type="button"
                     >
@@ -1068,7 +1129,10 @@ export function Dashboard() {
                     <span className="cluster-bar-label">Filter by Cluster:</span>
                     <button
                       className={`cluster-pill ${selectedCluster === null ? "selected" : ""}`}
-                      onClick={() => setSelectedCluster(null)}
+                      onClick={() => {
+                        setSelectedCluster(null);
+                        setEventPage(0);
+                      }}
                       type="button"
                     >
                       All
@@ -1079,7 +1143,10 @@ export function Dashboard() {
                         className={`cluster-pill ${c.isOutlier ? "outlier" : ""} ${
                           selectedCluster === c.name ? "selected" : ""
                         }`}
-                        onClick={() => setSelectedCluster(selectedCluster === c.name ? null : c.name)}
+                        onClick={() => {
+                          setSelectedCluster(selectedCluster === c.name ? null : c.name);
+                          setEventPage(0);
+                        }}
                         type="button"
                       >
                         {c.name} ({c.total})
@@ -1104,7 +1171,7 @@ export function Dashboard() {
                         </tr>
                       </thead>
                       <tbody>
-                        {displayedEvents.map((event) => (
+                        {visibleEvents.map((event) => (
                           <tr key={event.event_id}>
                             <td>
                               <span
@@ -1154,6 +1221,36 @@ export function Dashboard() {
                     <div className="empty-state">No matching log records found for this filter.</div>
                   )}
                 </div>
+                {displayedEvents.length > EVENT_PAGE_SIZE && (
+                  <div className="table-pagination">
+                    <span>
+                      Showing {visibleEventPage * EVENT_PAGE_SIZE + 1}–
+                      {Math.min((visibleEventPage + 1) * EVENT_PAGE_SIZE, displayedEvents.length)} of{" "}
+                      {displayedEvents.length.toLocaleString()} events
+                    </span>
+                    <div>
+                      <button
+                        className="button button-secondary"
+                        disabled={visibleEventPage === 0}
+                        onClick={() => setEventPage(visibleEventPage - 1)}
+                        type="button"
+                      >
+                        Previous
+                      </button>
+                      <span>
+                        Page {visibleEventPage + 1} of {pageCount}
+                      </span>
+                      <button
+                        className="button button-secondary"
+                        disabled={visibleEventPage >= pageCount - 1}
+                        onClick={() => setEventPage(visibleEventPage + 1)}
+                        type="button"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </section>
             </div>
           )}

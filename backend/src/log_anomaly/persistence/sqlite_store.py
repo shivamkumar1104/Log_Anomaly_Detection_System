@@ -89,7 +89,6 @@ class SQLiteStore:
         method: str,
     ) -> str:
         """Persist a result batch and its metadata; return its stable analysis identifier."""
-        self.save(events)
         analysis_id = str(uuid4())
         payload = events.to_json(orient="records", date_format="iso")
         with self._connect() as connection:

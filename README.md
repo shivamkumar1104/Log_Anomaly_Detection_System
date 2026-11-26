@@ -127,12 +127,17 @@ be treated as sensitive log data.
 ### API endpoints
 
 - `GET /api/health`
-- `POST /api/upload` — multipart upload and real analysis
+- `POST /api/upload` — accepts a multipart upload and starts background analysis (`202 Accepted`)
+- `GET /api/uploads/{job_id}` — poll upload-processing status and retrieve the completed analysis ID
 - `POST /api/analyze` — analyze normalized event JSON
 - `GET /api/analyses` and `GET /api/analyses/{id}`
 - `GET /api/analyses/{id}/export?format=pdf|xlsx&exclude_anomalies=true`
 - `GET /api/alerts` and `GET /api/alerts/export?format=csv|json`
 - `GET /docs` — interactive local API documentation
+
+The website shows separate upload and analysis stages, then opens the saved result
+when processing completes. Large evidence tables are paginated so the browser
+does not render every log row at once.
 
 ### Final checks
 
